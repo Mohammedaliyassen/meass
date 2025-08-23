@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>متتبع الوجبات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+        }
+
+        .modal {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .modal.hidden {
+            visibility: hidden;
+            opacity: 0;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #33333373;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 100;
+            left: 50%;
+            bottom: 15%;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.5s linear;
+        }
+
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .modal-content::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 4px;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-cyan-400">وجبات الميس</h1>
+            <p class="text-gray-400 mt-2">إدارة وتتبع وجبات الظباط</p>
+        </header>
+
+        <div class="flex flex-wrap justify-center gap-4 mb-8">
+            <button id="manage-people-btn"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105 flex items-center justify-center gap-2">
+                <i data-lucide="users"></i>
+                <span>إدارة الظباط</span>
+            </button>
+            <button id="generate-daily-report-btn"
+                class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105 flex items-center justify-center gap-2">
+                <i data-lucide="message-square"></i>
+                <span>إرسال تقرير يومي</span>
+            </button>
+            <button id="generate-detailed-report-btn"
+                class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105 flex items-center justify-center gap-2">
+                <i data-lucide="file-spreadsheet"></i>
+                <span>تقرير مفصل للشهر</span>
+            </button>
+        </div>
+
+        <main>
+            <div id="people-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Person cards will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Meal Modal -->
+    <div id="add-meal-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 id="meal-modal-title" class="text-2xl font-bold text-cyan-400">إضافة وجبة</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-6 max-h-[60vh] overflow-y-auto modal-content">
+                <div class="mb-4">
+                    <label for="meal-type-select" class="block mb-2 text-sm font-medium text-gray-300">نوع
+                        الوجبة</label>
+                    <select id="meal-type-select"
+                        class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5">
+                        <option value="breakfast">فطار</option>
+                        <option value="lunch">غداء</option>
+                        <option value="dinner">عشاء</option>
+                    </select>
+                </div>
+                <div id="meal-items-container" class="space-y-4"></div>
+                <button id="add-meal-item-btn"
+                    class="mt-4 text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-2">
+                    <i data-lucide="plus-circle"></i><span>إضافة صنف آخر</span>
+                </button>
+            </div>
+            <br class="p-6 bg-gray-800 rounded-b-2xl border-t border-gray-700 flex justify-between items-center">
+                <div class="text-xl font-bold m-3 ms-5">الإجمالي: <span id="meal-total-price" class="text-cyan-400">0.00</span>
+                    جنيه</div></br>
+                <button id="save-meal-btn"
+                    class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg m-3 ms-5">حفظ الوجبة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Report Modal -->
+    <div id="detailed-report-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-2xl font-bold text-teal-400">إنشاء تقرير مفصل</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label for="person-select-detailed" class="block mb-2 text-sm font-medium text-gray-300">اختر
+                        الشخص</label>
+                    <select id="person-select-detailed"
+                        class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"></select>
+                </div>
+                <p class="text-sm text-gray-400">سيتم إنشاء تقرير PDF مفصل بجميع وجبات الشخص المحدد للشهر الحالي.</p>
+            </div>
+            <div class="p-6 bg-gray-800 rounded-b-2xl border-t border-gray-700 text-center">
+                <button id="download-detailed-pdf-btn"
+                    class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-8 rounded-lg w-full">
+                    إنشاء وتحميل PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage People Modal -->
+    <div id="manage-people-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-2xl font-bold text-indigo-400">إدارة الأشخاص</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-6 max-h-[60vh] overflow-y-auto modal-content space-y-3" id="people-list-modal"></div>
+            <div class="p-6 bg-gray-800 rounded-b-2xl border-t border-gray-700">
+                <h4 class="text-lg font-semibold mb-3">إضافة شخص جديد</h4>
+                <div class="flex gap-2">
+                    <input type="text" id="new-person-name" placeholder="اسم الشخص الجديد"
+                        class="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button id="add-person-btn"
+                        class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold p-2 rounded-lg flex-shrink-0"><i
+                            data-lucide="plus"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Person Modal -->
+    <div id="edit-person-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h3 id="edit-person-title" class="text-2xl font-bold text-blue-400">تعديل اسم</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-6">
+                <label for="edit-person-name-input" class="block mb-2 text-sm font-medium text-gray-300">الاسم
+                    الجديد</label>
+                <input type="text" id="edit-person-name-input"
+                    class="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="hidden" id="edit-person-id-input">
+            </div>
+            <div class="p-6 bg-gray-800 rounded-b-2xl border-t border-gray-700 flex justify-end">
+                <button id="save-person-edit-btn"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">حفظ التعديل</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Report Modal -->
+    <div id="daily-report-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-cyan-400">إرسال تقرير يومي عبر واتساب</h2>
+                <button class="close-modal-btn text-gray-400 hover:text-white"><i data-lucide="x"
+                        class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label for="person-select-daily" class="block mb-2 text-sm font-medium text-gray-300">اختر
+                        الشخص</label>
+                    <select id="person-select-daily"
+                        class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5"></select>
+                </div>
+                <div>
+                    <label for="date-select-daily" class="block mb-2 text-sm font-medium text-gray-300">اختر
+                        اليوم</label>
+                    <input type="date" id="date-select-daily"
+                        class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2.5">
+                </div>
+                <button id="generate-daily-message-btn"
+                    class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg w-full">
+                    تجهيز الرسالة
+                </button>
+            </div>
+            <div id="daily-message-container" class="p-6 border-t border-gray-700 hidden">
+                <h3 class="text-lg font-semibold mb-2">معاينة الرسالة:</h3>
+                <div id="daily-message-preview"
+                    class="bg-gray-700 p-4 rounded-lg whitespace-pre-wrap text-sm max-h-40 overflow-y-auto modal-content">
+                </div>
+                <a id="send-whatsapp-btn" href="#" target="_blank"
+                    class="mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg w-full flex items-center justify-center gap-2 text-lg">
+                    <i data-lucide="send"></i>
+                    <span>إرسال عبر واتساب</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal"
+        class="modal hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-700 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <h3 class="text-lg font-bold mb-4" id="confirmation-title">هل أنت متأكد؟</h3>
+            <p class="text-gray-300 mb-6" id="confirmation-message"></p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-btn"
+                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">نعم</button>
+                <button id="cancel-btn"
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">إلغاء</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DATA STORAGE & STATE ---
+            const PEOPLE_KEY = 'mealTrackerAppPeople';
+            const MEALS_KEY = 'mealTrackerAppMeals';
+            let people = JSON.parse(localStorage.getItem(PEOPLE_KEY)) || [{ id: Date.now(), name: 'أحمد محمود' }];
+            let meals = JSON.parse(localStorage.getItem(MEALS_KEY)) || [];
+            let currentPersonIdForMeal = null;
+            let confirmationCallback = null;
+
+            // --- DOM ELEMENTS ---
+            const peopleContainer = document.getElementById('people-container');
+            const generateDailyReportBtn = document.getElementById('generate-daily-report-btn');
+            const generateDetailedReportBtn = document.getElementById('generate-detailed-report-btn');
+            const managePeopleBtn = document.getElementById('manage-people-btn');
+            const modals = document.querySelectorAll('.modal');
+            const toast = document.getElementById('toast');
+
+            // Modal Elements
+            const addMealModal = document.getElementById('add-meal-modal');
+            const mealModalTitle = document.getElementById('meal-modal-title');
+            const mealTypeSelect = document.getElementById('meal-type-select');
+            const mealItemsContainer = document.getElementById('meal-items-container');
+            const addMealItemBtn = document.getElementById('add-meal-item-btn');
+            const mealTotalPriceEl = document.getElementById('meal-total-price');
+            const saveMealBtn = document.getElementById('save-meal-btn');
+            const detailedReportModal = document.getElementById('detailed-report-modal');
+            const personSelectDetailed = document.getElementById('person-select-detailed');
+            const downloadDetailedPdfBtn = document.getElementById('download-detailed-pdf-btn');
+            const managePeopleModal = document.getElementById('manage-people-modal');
+            const peopleListModal = document.getElementById('people-list-modal');
+            const newPersonNameInput = document.getElementById('new-person-name');
+            const addPersonBtn = document.getElementById('add-person-btn');
+            const editPersonModal = document.getElementById('edit-person-modal');
+            const editPersonTitle = document.getElementById('edit-person-title');
+            const editPersonNameInput = document.getElementById('edit-person-name-input');
+            const editPersonIdInput = document.getElementById('edit-person-id-input');
+            const savePersonEditBtn = document.getElementById('save-person-edit-btn');
+            const dailyReportModal = document.getElementById('daily-report-modal');
+            const personSelectDaily = document.getElementById('person-select-daily');
+            const dateSelectDaily = document.getElementById('date-select-daily');
+            const generateDailyMessageBtn = document.getElementById('generate-daily-message-btn');
+            const dailyMessageContainer = document.getElementById('daily-message-container');
+            const dailyMessagePreview = document.getElementById('daily-message-preview');
+            const sendWhatsappBtn = document.getElementById('send-whatsapp-btn');
+            const confirmationModal = document.getElementById('confirmation-modal');
+            const confirmBtn = document.getElementById('confirm-btn');
+            const cancelBtn = document.getElementById('cancel-btn');
+
+            // --- DATA PERSISTENCE ---
+            const savePeople = () => localStorage.setItem(PEOPLE_KEY, JSON.stringify(people));
+            const saveMeals = () => localStorage.setItem(MEALS_KEY, JSON.stringify(meals));
+
+            // --- UTILITIES ---
+            const showToast = (message) => {
+                toast.textContent = message;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            };
+            const openModal = (modal) => modal.classList.remove('hidden');
+            const closeModal = (modal) => modal.classList.add('hidden');
+            const showConfirmation = (title, message, callback) => {
+                document.getElementById('confirmation-title').textContent = title;
+                document.getElementById('confirmation-message').textContent = message;
+                confirmationCallback = callback;
+                openModal(confirmationModal);
+            };
+            const getCurrentMonthName = () => new Date().toLocaleString('ar-EG', { month: 'long', year: 'numeric' });
+
+            // --- RENDER MAIN UI ---
+            const render = () => {
+                peopleContainer.innerHTML = '';
+                if (people.length === 0) {
+                    peopleContainer.innerHTML = `<p class="text-gray-400 text-center col-span-full">لا يوجد أشخاص. قم بإضافتهم من زر "إدارة الأشخاص".</p>`;
+                    return;
+                }
+                const now = new Date();
+                const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+                people.forEach(person => {
+                    const mealsThisMonth = meals.filter(meal => {
+                        const mealDate = new Date(meal.date);
+                        return meal.personId === person.id && mealDate >= firstDayOfMonth;
+                    });
+                    const totalCostThisMonth = mealsThisMonth.reduce((sum, meal) => sum + meal.total, 0);
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-800 p-6 rounded-2xl shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:shadow-cyan-500/50 hover:scale-105';
+                    card.innerHTML = `
+                        <div class="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center mb-4 border-4 border-gray-600">
+                            <i data-lucide="user" class="w-12 h-12 text-cyan-400"></i>
+                        </div>
+                        <h3 class="text-xl font-bold">${person.name}</h3>
+                        <p class="text-gray-400 mt-2">تكلفة هذا الشهر</p>
+                        <p class="text-4xl font-bold text-cyan-400 my-2">${totalCostThisMonth.toFixed(2)}</p>
+                        <button data-person-id="${person.id}" class="add-meal-btn mt-4 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 px-5 rounded-lg flex items-center gap-2 transition-transform transform hover:scale-110">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                            <span>إضافة وجبة</span>
+                        </button>`;
+                    peopleContainer.appendChild(card);
+                });
+                lucide.createIcons();
+            };
+
+            // --- MEAL MODAL LOGIC ---
+            const addMealItemInput = (name = '', price = '') => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex gap-2 items-center meal-item-row';
+                itemDiv.innerHTML = `
+                    <input type="text" value="${name}" placeholder="اسم الصنف" class="w-2/3 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 meal-item-name">
+                    <input type="number" value="${price}" placeholder="السعر" min="0" step="0.25" class="w-1/3 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 meal-item-price">
+                    <button class="text-red-500 hover:text-red-400 remove-item-btn"><i data-lucide="trash-2" class="w-5 h-5"></i></button>`;
+                mealItemsContainer.appendChild(itemDiv);
+                lucide.createIcons();
+            };
+
+            const updateMealTotal = () => {
+                const prices = document.querySelectorAll('.meal-item-price');
+                const total = Array.from(prices).reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
+                mealTotalPriceEl.textContent = total.toFixed(2);
+            };
+
+            const openAddMealModal = (personId) => {
+                currentPersonIdForMeal = personId;
+                const person = people.find(p => p.id === personId);
+                mealModalTitle.textContent = `إضافة وجبة لـ ${person.name}`;
+                mealItemsContainer.innerHTML = '';
+                addMealItemInput();
+                updateMealTotal();
+                openModal(addMealModal);
+            };
+
+            const handleSaveMeal = () => {
+                const items = [];
+                document.querySelectorAll('.meal-item-row').forEach(row => {
+                    const name = row.querySelector('.meal-item-name').value.trim();
+                    const price = parseFloat(row.querySelector('.meal-item-price').value) || 0;
+                    if (name && price > 0) items.push({ name, price });
+                });
+
+                if (items.length === 0) {
+                    showToast('الرجاء إدخال صنف واحد على الأقل بسعر صحيح.');
+                    return;
+                }
+
+                const total = items.reduce((sum, item) => sum + item.price, 0);
+                meals.push({
+                    id: Date.now(),
+                    personId: currentPersonIdForMeal,
+                    date: new Date().toISOString(),
+                    type: mealTypeSelect.value,
+                    items,
+                    total
+                });
+                saveMeals();
+                showToast('تم حفظ الوجبة بنجاح!');
+                closeModal(addMealModal);
+                render();
+            };
+
+            // --- PEOPLE MANAGEMENT LOGIC ---
+            const renderPeopleInModal = () => {
+                peopleListModal.innerHTML = '';
+                people.forEach(person => {
+                    const personDiv = document.createElement('div');
+                    personDiv.className = 'flex items-center justify-between bg-gray-700 p-3 rounded-lg';
+                    personDiv.innerHTML = `
+                        <span class="font-semibold">${person.name}</span>
+                        <div class="flex gap-2">
+                            <button data-id="${person.id}" class="edit-person-btn text-blue-400 hover:text-blue-300"><i data-lucide="edit"></i></button>
+                            <button data-id="${person.id}" class="delete-person-btn text-red-500 hover:text-red-400"><i data-lucide="trash-2"></i></button>
+                        </div>`;
+                    peopleListModal.appendChild(personDiv);
+                });
+                lucide.createIcons();
+            };
+
+            const openEditPersonModal = (personId) => {
+                const person = people.find(p => p.id === personId);
+                if (person) {
+                    editPersonTitle.textContent = `تعديل اسم: ${person.name}`;
+                    editPersonNameInput.value = person.name;
+                    editPersonIdInput.value = person.id;
+                    openModal(editPersonModal);
+                }
+            };
+
+            const handleSavePersonEdit = () => {
+                const personId = parseInt(editPersonIdInput.value);
+                const newName = editPersonNameInput.value.trim();
+
+                if (!newName) {
+                    showToast('لا يمكن ترك الاسم فارغاً.');
+                    return;
+                }
+
+                const person = people.find(p => p.id === personId);
+                if (person) {
+                    person.name = newName;
+                    savePeople();
+                    render();
+                    renderPeopleInModal();
+                    closeModal(editPersonModal);
+                    showToast('تم تعديل الاسم بنجاح.');
+                }
+            };
+
+            // --- DETAILED REPORT PDF LOGIC ---
+            const downloadDetailedPDF = () => {
+                const personId = parseInt(personSelectDetailed.value);
+                if (!personId) {
+                    showToast("الرجاء اختيار شخص أولاً.");
+                    return;
+                }
+                const person = people.find(p => p.id === personId);
+                showToast(`جاري إنشاء تقرير لـ ${person.name}...`);
+
+                const reportContainer = document.createElement('div');
+                reportContainer.style.position = 'absolute';
+                reportContainer.style.left = '-9999px';
+                reportContainer.style.background = 'white';
+                reportContainer.style.color = 'black';
+                reportContainer.style.padding = '20px';
+                reportContainer.style.width = '800px';
+                reportContainer.style.direction = 'rtl';
+                reportContainer.style.fontFamily = 'Cairo, sans-serif';
+
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                const personMealsThisMonth = meals.filter(meal => {
+                    const mealDate = new Date(meal.date);
+                    return meal.personId === personId && mealDate.getFullYear() === year && mealDate.getMonth() === month;
+                });
+
+                let tableHTML = `
+                    <h1 style="text-align: center; font-size: 24px; margin-bottom: 10px;">تقرير الوجبات المفصل - ${person.name}</h1>
+                    <h2 style="text-align: center; font-size: 18px; color: #555; margin-bottom: 20px;">الشهر: ${getCurrentMonthName()}</h2>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #4A5568; color: white;">
+                                <th style="border: 1px solid #ddd; padding: 8px;">التاريخ</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">فطار</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">غداء</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">عشاء</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">إجمالي اليوم</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                let monthTotal = 0;
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const currentDate = new Date(year, month, day);
+                    const mealsForDay = personMealsThisMonth.filter(meal => new Date(meal.date).getDate() === day);
+
+                    if (mealsForDay.length === 0) continue;
+
+                    const formatMealCellHTML = (mealType) => {
+                        const meal = mealsForDay.find(m => m.type === mealType);
+                        if (!meal) return '';
+                        let content = meal.items.map(item => `<div>${item.name}: ${item.price.toFixed(2)}</div>`).join('');
+                        content += `<hr style="margin: 4px 0; border-top: 1px solid #ccc;"><div style="font-weight: bold;">الإجمالي: ${meal.total.toFixed(2)}</div>`;
+                        return content;
+                    };
+
+                    const dayTotal = mealsForDay.reduce((sum, meal) => sum + meal.total, 0);
+                    monthTotal += dayTotal;
+
+                    tableHTML += `
+                        <tr>
+                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: top;">${currentDate.toLocaleDateString('ar-EG')}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; vertical-align: top;">${formatMealCellHTML('breakfast')}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; vertical-align: top;">${formatMealCellHTML('lunch')}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; vertical-align: top;">${formatMealCellHTML('dinner')}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: middle; font-weight: bold;">${dayTotal.toFixed(2)}</td>
+                        </tr>`;
+                }
+
+                tableHTML += `
+                        <tr style="background-color: #4A5568; color: white; font-weight: bold; font-size: 14px;">
+                            <td colspan="4" style="border: 1px solid #ddd; padding: 10px; text-align: center;">الإجمالي الشهري</td>
+                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${monthTotal.toFixed(2)}</td>
+                        </tr>
+                    </tbody></table>`;
+
+                reportContainer.innerHTML = tableHTML;
+                document.body.appendChild(reportContainer);
+
+                html2canvas(reportContainer, { scale: 2 }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/png');
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'pt',
+                        format: 'a4'
+                    });
+
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const canvasWidth = canvas.width;
+                    const canvasHeight = canvas.height;
+                    const ratio = canvasWidth / canvasHeight;
+                    const imgHeight = pdfWidth / ratio;
+
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    const addFooter = (pdfInstance) => {
+                        const pageCount = pdfInstance.internal.getNumberOfPages();
+                        pdfInstance.setPage(pageCount);
+                        const link = 'https://waves.pockethost.io/mohammedali2001';
+                        pdfInstance.setFontSize(9);
+                        pdfInstance.setTextColor(150);
+                        pdfInstance.text(`page ${pageCount}`, pdfWidth / 2, pageHeight - 20, { align: 'center' });
+                        pdfInstance.setTextColor(0, 0, 255);
+                        pdfInstance.textWithLink('Mohammed Ali', 20, pageHeight - 20, { url: link });
+                    };
+
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                    addFooter(pdf);
+                    heightLeft -= pageHeight;
+
+                    while (heightLeft > 0) {
+                        position -= pageHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                        addFooter(pdf);
+                        heightLeft -= pageHeight;
+                    }
+
+                    pdf.save(`Detailed_Report_${person.name}_${getCurrentMonthName()}.pdf`);
+
+                    document.body.removeChild(reportContainer);
+                    closeModal(detailedReportModal);
+                });
+            };
+
+            // --- EVENT LISTENERS ---
+            generateDetailedReportBtn.addEventListener('click', () => {
+                personSelectDetailed.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                openModal(detailedReportModal);
+            });
+            downloadDetailedPdfBtn.addEventListener('click', downloadDetailedPDF);
+
+            peopleContainer.addEventListener('click', (e) => {
+                const btn = e.target.closest('.add-meal-btn');
+                if (btn) openAddMealModal(parseInt(btn.dataset.personId));
+            });
+            addMealItemBtn.addEventListener('click', () => addMealItemInput());
+            mealItemsContainer.addEventListener('click', (e) => {
+                if (e.target.closest('.remove-item-btn')) {
+                    e.target.closest('.meal-item-row').remove();
+                    updateMealTotal();
+                }
+            });
+            mealItemsContainer.addEventListener('input', updateMealTotal);
+            saveMealBtn.addEventListener('click', handleSaveMeal);
+
+            managePeopleBtn.addEventListener('click', () => {
+                renderPeopleInModal();
+                openModal(managePeopleModal);
+            });
+
+            addPersonBtn.addEventListener('click', () => {
+                const name = newPersonNameInput.value.trim();
+                if (!name) { showToast('الرجاء إدخال اسم صحيح.'); return; }
+                people.push({ id: Date.now(), name });
+                savePeople();
+                newPersonNameInput.value = '';
+                renderPeopleInModal();
+                render();
+                showToast('تمت إضافة الشخص بنجاح.');
+            });
+
+            peopleListModal.addEventListener('click', (e) => {
+                const editBtn = e.target.closest('.edit-person-btn');
+                const deleteBtn = e.target.closest('.delete-person-btn');
+                if (editBtn) {
+                    openEditPersonModal(parseInt(editBtn.dataset.id));
+                }
+                if (deleteBtn) {
+                    const personId = parseInt(deleteBtn.dataset.id);
+                    showConfirmation('حذف شخص', 'هل أنت متأكد؟ سيتم حذف جميع وجباته المسجلة أيضاً.', () => {
+                        people = people.filter(p => p.id !== personId);
+                        meals = meals.filter(m => m.personId !== personId);
+                        savePeople();
+                        saveMeals();
+                        renderPeopleInModal();
+                        render();
+                        showToast('تم حذف الشخص بنجاح.');
+                        closeModal(confirmationModal);
+                    });
+                }
+            });
+
+            savePersonEditBtn.addEventListener('click', handleSavePersonEdit);
+
+            generateDailyReportBtn.addEventListener('click', () => {
+                personSelectDaily.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                dateSelectDaily.valueAsDate = new Date();
+                dailyMessageContainer.classList.add('hidden');
+                dailyMessagePreview.textContent = '';
+                openModal(dailyReportModal);
+            });
+
+            generateDailyMessageBtn.addEventListener('click', () => {
+                const personId = parseInt(personSelectDaily.value);
+                const selectedDateStr = dateSelectDaily.value;
+
+                if (!personId || !selectedDateStr) {
+                    showToast('الرجاء اختيار شخص وتاريخ.');
+                    return;
+                }
+
+                const person = people.find(p => p.id === personId);
+                const selectedDate = new Date(selectedDateStr);
+
+                const mealsForDay = meals.filter(meal => {
+                    const mealDate = new Date(meal.date);
+                    return meal.personId === personId &&
+                        mealDate.getFullYear() === selectedDate.getFullYear() &&
+                        mealDate.getMonth() === selectedDate.getMonth() &&
+                        mealDate.getDate() === selectedDate.getDate();
+                });
+
+                const sendWhatsappBtn = document.getElementById('send-whatsapp-btn');
+                if (mealsForDay.length === 0) {
+                    dailyMessagePreview.textContent = 'لا توجد وجبات مسجلة لهذا الشخص في اليوم المحدد.';
+                    dailyMessageContainer.classList.remove('hidden');
+                    sendWhatsappBtn.classList.add('hidden');
+                    return;
+                }
+
+                let message = `مساء الفل ${person.name},\n\n`;
+                message += `ده ملخص وجباتك ليوم ${selectedDate.toLocaleDateString('ar-EG')}:\n\n`;
+                let dayTotal = 0;
+
+                const formatMealMessage = (mealType, typeLabel) => {
+                    const meal = mealsForDay.find(m => m.type === mealType);
+                    if (!meal) return '';
+                    let mealMessage = `*${typeLabel}:*\n`;
+                    meal.items.forEach(item => {
+                        mealMessage += `- ${item.name} (${item.price.toFixed(2)} جنيه)\n`;
+                    });
+                    mealMessage += `*إجمالي ${typeLabel}: ${meal.total.toFixed(2)} جنيه*\n\n`;
+                    dayTotal += meal.total;
+                    return mealMessage;
+                };
+
+                message += formatMealMessage('breakfast', 'الفطار');
+                message += formatMealMessage('lunch', 'الغداء');
+                message += formatMealMessage('dinner', 'العشاء');
+
+                message += `--------------------\n`;
+                message += `*الإجمالي الكلي لليوم: ${dayTotal.toFixed(2)} جنيه*`;
+
+                dailyMessagePreview.textContent = message;
+                sendWhatsappBtn.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+                dailyMessageContainer.classList.remove('hidden');
+                sendWhatsappBtn.classList.remove('hidden');
+            });
+
+            modals.forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal || e.target.closest('.close-modal-btn')) {
+                        closeModal(modal);
+                    }
+                });
+            });
+            confirmBtn.addEventListener('click', () => {
+                if (confirmationCallback) confirmationCallback();
+            });
+            cancelBtn.addEventListener('click', () => closeModal(confirmationModal));
+
+            // --- INITIALIZATION ---
+            render();
+        });
+    </script>
+</body>
+
+</html>
